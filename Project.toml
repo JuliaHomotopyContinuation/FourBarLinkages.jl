@@ -1,6 +1,6 @@
-name = "FourBarLinkage"
+name = "FourBarLinkages"
 uuid = "758214f4-974a-11e9-3ac9-773adbcee886"
-authors = ["Sascha Timme <sascha.timme@gmail.com>", "Anna Eckhard"]
+authors = ["Sascha Timme <sascha.timme@gmail.com>", "Anna Eckhardt"]
 version = "0.1.0"
 
 [deps]
