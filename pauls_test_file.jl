@@ -51,14 +51,14 @@ end
 INDICES = findall(is_it_real.(res))
 
 
-function trace_points(Sys, start_sol_for_moving_ϕ, ϕ, Δt)
+function trace_points(Sys, start_sol_for_moving_ϕ, ϕ, Δt, N)
         tracker = pathtracker(Sys, parameters=[λ], p₁=[cis(ϕ)], p₀=[cis(ϕ+Δt)])
         back_at_the_start = false
         current_point = start_sol_for_moving_ϕ
         curve = [deepcopy(real_coords(current_point, ϕ))]
         β = ϕ
         plus = true
-        for i in 1:1000
+        for i in 1:N
                 if plus
                         set_parameters!(tracker; start_parameters=[cis(β)], target_parameters=[cis(β+Δt)])
                 else
@@ -88,7 +88,7 @@ end
 
 
 
-realRes = trace_points(Sys, res[1], ϕ, 0.05)
+realRes = trace_points(Sys, res[1], ϕ, 0.025, 3000)
 
 
 
