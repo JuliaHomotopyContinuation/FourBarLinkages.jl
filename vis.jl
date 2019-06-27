@@ -119,9 +119,14 @@ function plot(realRes, bars, points)
         Makie.scatter!(scene,NinePoints, marker='★', markersize=1, color=:green)
 
         #change by time
+        # time=Node(1)
+        # myfunc(t) = [AB_points[1],D_points[2*t-1],P_points[2*t-1],C_points[2*t-1],AB_points[2],C_points[2*t-1],D_points[2*t-1],AB_points[1],D_points[2*t],P_points[2*t],C_points[2*t],AB_points[2],C_points[2*t],D_points[2*t]];
+        # linecolors=[:blue for i in 1:14]
+        # scene=Makie.lines!(scene, lift(t->myfunc(t), time), color = linecolors, linewidth = 3)
+        #linecolors=[:blue for i in 1:7]
         time=Node(1)
-        myfunc(t) = [AB_points[1],D_points[2*t-1],P_points[2*t-1],C_points[2*t-1],AB_points[2],C_points[2*t-1],D_points[2*t-1],AB_points[1],D_points[2*t],P_points[2*t],C_points[2*t],AB_points[2],C_points[2*t],D_points[2*t]];
-        linecolors=[:blue for i in 1:14]
+        myfunc(t) = [AB_points[1],D_points[t],P_points[t],C_points[t],AB_points[2],C_points[t],D_points[t]];
+        linecolors=[:blue for i in 1:7]
         scene=Makie.lines!(scene, lift(t->myfunc(t), time), color = linecolors, linewidth = 3)
 
         record(scene, "./docs/media/time_series.gif", 1:(N/2)) do i

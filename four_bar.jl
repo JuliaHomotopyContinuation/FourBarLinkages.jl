@@ -2,7 +2,7 @@ using HomotopyContinuation, LinearAlgebra, DynamicPolynomials
 using StaticArrays
 using JLD2
 
-@load "four_bar_start_solution.jld2"
+#@load "four_bar_start_solution.jld2"
 
 
 @polyvar x x̂ a â y ŷ b b̂
@@ -89,17 +89,17 @@ start_sol=monodromy_solve(FSystem,start_var, start_par;
                         equivalence_classes=true);
 
 
-using JLD2, FileIO
+# using JLD2, FileIO
 
 four_bar_start_solution = Dict(["δ₀" => δ₀,
             "δ̂₀" => δ̂₀,
             "solutions"=> reduce(hcat, start_sol.solutions)])
 
-save("four_bar_start_solution.jld2",
-            "δ₀", δ₀,
-            "δ̂₀", δ̂₀,
-            "solutions", reduce(hcat, start_sol.solutions))
-load("four_bar_start_solution.jld2")
+# save("four_bar_start_solution.jld2",
+#             "δ₀", δ₀,
+#             "δ̂₀", δ̂₀,
+#             "solutions", reduce(hcat, start_sol.solutions))
+# load("four_bar_start_solution.jld2")
 
 start_var=[xayb_rand;Γ;Γ̂];
 
@@ -128,11 +128,11 @@ function isoToReal(a ::ComplexF64,b ::ComplexF64)
          x2=reim(b);
          if abs(x1[1]-x2[1])<1e-10
                 if abs(x1[2]+x2[2])<1e10
-                         return x1
+                        return x1
                 end
         end
         return -1
- end
+end
 
 #filter real solutions
  function realFourbars(res)
