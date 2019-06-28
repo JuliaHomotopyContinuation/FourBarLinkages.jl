@@ -1,10 +1,33 @@
 module FourBarLinkages
 
-export compute_generic_solutions, save_generic_solutions, load_generic_solutions
+export compute_generic_solutions, save_generic_solutions, load_generic_solutions,
+    four_bars, FourBar
 
 using HomotopyContinuation, LinearAlgebra, DynamicPolynomials
 using StaticArrays
 import JLD2, FileIO
+
+
+struct FourBar
+    A::ComplexF64
+    B::ComplexF64
+    x::ComplexF64
+    a::ComplexF64
+    u::ComplexF64
+    y::ComplexF64
+    b::ComplexF64
+    v::ComplexF64
+    P₀::ComplexF64
+end
+
+function FourBar(solution::Vector{ComplexF64}, P₀::ComplexF64)
+    x, a, y, b = solution[1], solution[3], solution[5], solution[7]
+    u = x - a
+    v = y - b
+    A = P₀ + a
+    B = P₀ + b
+    FourBar(A, B, x, a, u, y, b, v, P₀)
+end
 
 function equations()
     @polyvar x x̂ a â y ŷ b b̂
@@ -87,5 +110,39 @@ function load_generic_solutions(filename)
     data = FileIO.load(endswith(filename, ".jld2") ? filename : filename * ".jld2")
     (solutions=data["solutions"], δ₀=data["δ₀"], δ̂₀=data["δ̂₀"])
 end
+
+function solve_instance(δ::Vector{ComplexF64}, filename::String)
+    eqs = equations()
+    δ̂ = conj.(δ)
+    generic_sols, δ₀, δ̂₀ = load_generic_solutions(filename)
+    start_sols = [view(generic_sols, 1:24, i) for i in 1:size(generic_sols,2)]
+    res = solve(eqs.F, start_sols;
+            parameters = [eqs.δ; eqs.δ̂],
+            start_parameters=[δ₀;δ̂₀],
+            target_parameters=[δ;δ̂])
+end
+
+is_conjugated_pair(u, v, tol) = abs(u - conj(v)) < tol
+is_physical_solution(s, tol) = all(j -> is_conjugated_pair(s[j], s[j+1], tol), 1:2:8)
+function physical_four_bars(solutions; tol=1e-10)
+    filter(s -> is_physical_solution(s, tol), solutions)
+end
+
+function four_bars(points::Vector{<:Complex}, filename::String; real_tol=1e-10)
+    @assert length(points) == 9 "Expected 9 points"
+    eqs = equations()
+    P₀ = points[1]
+    δ = points[2:9] .- P₀
+    result = solve_instance(δ, filename)
+
+    fourbars = FourBar[]
+    for s in solutions(result; only_nonsingular=true)
+        if is_physical_solution(s, real_tol)
+            push!(fourbars, FourBar(s, P₀))
+        end
+    end
+    fourbars
+end
+
 
 end # module

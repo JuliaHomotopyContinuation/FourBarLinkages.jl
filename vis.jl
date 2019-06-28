@@ -128,10 +128,15 @@ function plot(realRes, bars, points)
         myfunc(t) = [AB_points[1],D_points[t],P_points[t],C_points[t],AB_points[2],C_points[t],D_points[t]];
         linecolors=[:blue for i in 1:7]
         scene=Makie.lines!(scene, lift(t->myfunc(t), time), color = linecolors, linewidth = 3)
-
-        record(scene, "./docs/media/time_series.gif", 1:(N/2)) do i
-                push!(time,i)
+        display(scene)
+        for i in 1:div(N,2)
+                  push!(time,i)
+                  sleep(1/24)
         end
+        #
+        # record(scene, "./docs/media/time_series.gif", 1:(N/2)) do i
+        #         push!(time,i)
+        # end
 end
 
 
