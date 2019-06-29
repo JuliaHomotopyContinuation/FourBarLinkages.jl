@@ -1,10 +1,37 @@
 module FourBarLinkages
 
-export compute_generic_solutions, save_generic_solutions, load_generic_solutions
+export compute_generic_solutions, save_generic_solutions, load_generic_solutions,
+    four_bars, FourBar, animate, configurations
 
 using HomotopyContinuation, LinearAlgebra, DynamicPolynomials
+using Interpolations
 using StaticArrays
+using Makie
+import Parameters: @unpack
 import JLD2, FileIO
+
+include("sp_homotopy.jl")
+
+struct FourBar
+    A::ComplexF64
+    B::ComplexF64
+    x::ComplexF64
+    a::ComplexF64
+    u::ComplexF64
+    y::ComplexF64
+    b::ComplexF64
+    v::ComplexF64
+    P₀::ComplexF64
+end
+
+function FourBar(solution::Vector{ComplexF64}, P₀::ComplexF64)
+    x, a, y, b = solution[1], solution[3], solution[5], solution[7]
+    u = x - a
+    v = y - b
+    A = P₀ + a
+    B = P₀ + b
+    FourBar(A, B, x, a, u, y, b, v, P₀)
+end
 
 function equations()
     @polyvar x x̂ a â y ŷ b b̂
@@ -63,8 +90,10 @@ symmetry(s) = [s[5],s[6],s[7],s[8],s[1],s[2],s[3],s[4],
                s[9],s[10],s[11],s[12],s[13],s[14],s[15],s[16],
                s[17],s[18],s[19],s[20],s[21],s[22],s[23],s[24]]
 
-compute_generic_solutions() = compute_generic_solutions(compute_start_pair()...)
-function compute_generic_solutions(x₀, p₀)
+compute_generic_solutions(;kwargs...) = compute_generic_solutions(compute_start_pair()...;kwargs...)
+
+jld2_file(filename) = endswith(filename, ".jld2") ? filename : filename * ".jld2"
+function compute_generic_solutions(x₀, p₀; filename=nothing)
     eqs = equations()
     δ₀, δ̂₀ = p₀[1:8], p₀[9:16]
     group_actions = GroupActions(symmetry, s -> robert_cognates(s, δ₀, δ̂₀))
@@ -74,6 +103,12 @@ function compute_generic_solutions(x₀, p₀)
                 group_actions=group_actions,
                 target_solutions_count=1442,
                 equivalence_classes=true)
+    δ₀, δ̂₀ = result.parameters[1:8], result.parameters[9:16]
+    data = Dict(["δ₀" => δ₀, "δ̂₀" => δ̂₀, "solutions" => reduce(hcat, result.solutions)])
+    if filename !== nothing
+        FileIO.save(jld2_file(filename), data)
+    end
+    data
 end
 
 function save_generic_solutions(result::MonodromyResult, filename::String)
@@ -87,5 +122,239 @@ function load_generic_solutions(filename)
     data = FileIO.load(endswith(filename, ".jld2") ? filename : filename * ".jld2")
     (solutions=data["solutions"], δ₀=data["δ₀"], δ̂₀=data["δ̂₀"])
 end
+
+function solve_instance(δ::Vector{ComplexF64}, filename::String)
+    eqs = equations()
+    δ̂ = conj.(δ)
+    generic_sols, δ₀, δ̂₀ = load_generic_solutions(filename)
+    start_sols = [view(generic_sols, 1:24, i) for i in 1:size(generic_sols,2)]
+    res = solve(eqs.F, start_sols;
+            accuracy=1e-6,
+            precision=PRECISION_ADAPTIVE,
+            max_lost_digits=10,
+            parameters = [eqs.δ; eqs.δ̂],
+            start_parameters=[δ₀;δ̂₀],
+            target_parameters=[δ;δ̂])
+end
+
+is_conjugated_pair(u, v, tol) = abs(u - conj(v)) < tol
+is_physical_solution(s, tol) = all(j -> is_conjugated_pair(s[j], s[j+1], tol), 1:2:8)
+function physical_four_bars(solutions; tol=1e-10)
+    filter(s -> is_physical_solution(s, tol), solutions)
+end
+
+function four_bars(points::Vector{<:Complex}, filename::String; real_tol=1e-10)
+    @assert length(points) == 9 "Expected 9 points"
+    eqs = equations()
+    P₀ = points[1]
+    δ = points[2:9] .- P₀
+    result = solve_instance(δ, filename)
+
+    fourbars = FourBar[]
+    for s in solutions(result; only_nonsingular=true)
+        if is_physical_solution(s, real_tol)
+            push!(fourbars, FourBar(s, P₀))
+        end
+    end
+    fourbars
+end
+
+function loop_equations(F::FourBar)
+    @unpack x, a, y, b = F
+    x̂, â, ŷ, b̂ = conj.((x,a,y,b))
+    vars = @polyvar λ μ θ τ τ̂ # and offsets
+    [(x-a)*λ-x*θ-τ+a,
+     (x̂-â)*θ-x̂*λ-(τ̂-â)*λ*θ,
+     (y-b)*μ-y*θ-τ+b,
+     (ŷ-b̂)*θ-ŷ*μ-(τ̂-b̂)*μ*θ], vars
+end
+
+function is_valid_loop_solution(r)
+    is_conjugated_pair(r[3], r[4], 1e-4) || return false
+    abs(abs(r[1])-1) < 1e-4 && abs(abs(r[2]) - 1) < 1e-4
+end
+
+
+function loop_equations(F::FourBar)
+    @unpack x, a, y, b = F
+    x̂, â, ŷ, b̂ = conj.((x,a,y,b))
+    vars = @polyvar λ μ θ τ τ̂ # and offsets
+    [(x-a)*λ-x*θ-τ+a,
+     (x̂-â)*θ-x̂*λ-(τ̂-â)*λ*θ,
+     (y-b)*μ-y*θ-τ+b,
+     (ŷ-b̂)*θ-ŷ*μ-(τ̂-b̂)*μ*θ], vars
+end
+
+function trace_points(F::FourBar, λ₀, x₀; Δt = 1e-2, max_steps=20_000, accuracy=1e-8)
+    loop, (λ, _) = loop_equations(F)
+    ϕ = ϕ₀ = angle(λ₀)
+    angles = [(cis(ϕ₀), x₀[1], x₀[2])]
+    μ₀, θ₀ = angle(x₀[1]), angle(x₀[2])
+    tracker = coretracker(SPHomotopy(loop, λ), [randn(ComplexF64, 4)]; accuracy=accuracy)
+    HC.setup!(tracker, x₀, cis(ϕ), cis(ϕ+Δt))
+    x = current_x(tracker)
+    y = copy(x)
+    for i in 2:max_steps
+        retcode = track!(tracker, y, cis(ϕ), cis(ϕ+Δt))
+        # todo
+        if retcode != HC.CoreTrackerStatus.success
+            @warn "PathTracker failed with $retcode"
+            break
+        end
+
+        if is_valid_loop_solution(x)
+            ϕ += Δt
+            push!(angles, (cis(ϕ), x[1], x[2]))
+            y .= current_x(tracker)
+        else
+            branch_solutions = solutions(solve([subs(f, λ => cis(ϕ)) for f in loop]))
+            y .= branch_solutions[last(findmax(norm.([s - y for s in branch_solutions])))]
+            Δt = -Δt
+            push!(angles, (cis(ϕ), y[1], y[2]))
+        end
+
+        if abs(ϕ - ϕ₀) < 0.01Δt && abs(μ₀ - angle(y[1])) < 1e-2 && abs(θ₀ - angle(y[2])) < 1e-2
+            break
+        end
+    end
+    angles
+end
+
+function δ_angles_pairs(F::FourBar, δ)
+    loop, (_, _, _, τ, τ̂) = loop_equations(F)
+    pairs = Tuple{ComplexF64, NTuple{3, ComplexF64}}[]
+    for δᵢ in δ
+        # do only 1:3 since overdetermined sometimes doesn't work
+        # I think the randomization is then "bad".
+        # Which seems to happen for these equations quite often.
+        sols = solutions(solve([subs(f, τ => δᵢ, τ̂ => conj(δᵢ)) for f in loop][1:3]))
+        # filter out non physical solutions
+        for (λ, μ, θ) in sols
+            if isapprox(abs(λ), 1; atol=1e-6) &&
+               isapprox(abs(μ), 1; atol=1e-6) &&
+               isapprox(abs(θ), 1; atol=1e-6)
+                push!(pairs, (δᵢ, (λ, μ, θ)))
+            end
+        end
+    end
+    pairs
+end
+
+function missed_coupler_points(δ_angles_pairs, angles)
+    filter(δ_angles_pairs) do (δ, (λ, μ, θ))
+        α = SVector(λ, μ, θ)
+        for s in angles
+            if norm(α - SVector(s)) < 1e-2
+                return false
+            end
+        end
+        true
+    end
+end
+
+function configurations(F::FourBar, coupler_points::Vector{ComplexF64}; kwargs...)
+    δ = coupler_points[2:9] .- coupler_points[1]
+    pairs = δ_angles_pairs(F, δ)
+    # by the computation is (λ, μ, θ) = (0,0,0) a valid angle configuration
+    angles₁ = trace_points(F, 0.0, [1.0, 1.0, 0.0, 0im]; kwargs...)
+    curves = [angles₁]
+    pairs₂ = missed_coupler_points(pairs, angles₁)
+    if !isempty(pairs₂)
+        δ, (λ, μ, θ) = pairs₂[1]
+        angles₂ = trace_points(F, λ, [μ, θ, δ, conj(δ)]; kwargs...)
+        push!(curves, angles₂)
+    end
+    curves
+end
+
+
+to_point(z::ComplexF64) = Point2f0(reim(z)...)
+
+function four_bar_positions(F::FourBar, angles)
+    A = to_point(F.A)
+    B = to_point(F.B)
+    map(angles) do ((λ, μ, θ))
+        (A=A, B=B, C=to_point(F.A + F.u * λ), D=to_point(F.B + F.v * μ),
+            P=to_point(F.A + F.u * λ - F.x * θ))
+    end
+end
+
+function compute_limits(positions)
+    xmin = ymin = Float32(Inf)
+    xmax = ymax = -Float32(Inf)
+    for pos in positions
+        xmin = min(xmin, pos.A[1], pos.B[1], pos.C[1], pos.D[1], pos.P[1])
+        xmax = max(xmax, pos.A[1], pos.B[1], pos.C[1], pos.D[1], pos.P[1])
+        ymin = min(ymin, pos.A[2], pos.B[2], pos.C[2], pos.D[2], pos.P[2])
+        ymax = max(ymax, pos.A[2], pos.B[2], pos.C[2], pos.D[2], pos.P[2])
+    end
+    w = (xmax - xmin) * 1.1
+    h = (ymax - ymin) * 1.1
+    FRect(xmin, ymin, w, h)
+end
+
+function animate(F::FourBar,
+        angles::Vector{NTuple{3,ComplexF64}},
+        coupler_points::Vector{ComplexF64};
+        show_axis=true,
+        fps=24, seconds=5,
+        loop = false,
+        filename::Union{String,Nothing}=nothing)
+
+    positions = four_bar_positions(F, angles)
+    P = map(pos -> pos.P, positions)
+    #convert vectors to points
+    given_points = to_point.(coupler_points)
+    #plot Fourbar
+    limits = compute_limits(positions);
+    @show limits
+    markersize = max(limits.widths...)/50
+    scene = Scene(limits=limits, resolution = (1500,1500), scale_plot=false);
+    #angle points A and B
+
+
+    Makie.scatter!(scene, [to_point(F.A), to_point(F.B)], color=:DIMGRAY,
+                markersize=markersize, marker='▲', show_axis=show_axis)
+    Makie.scatter!(scene, given_points, marker=:x, markersize=markersize,
+        color=:INDIANRED, show_axis=show_axis)
+    #Coupler Curve
+    Makie.lines!(scene, P, color = :black, show_axis=show_axis);
+
+    #Nine points given
+    t_source = Node(1)
+
+    fourbar_at = t -> begin
+        A, B, C, D, Pᵢ = positions[t]
+        [A,C,Pᵢ,D,B,D,C]
+    end
+    lines!(scene, lift(t->fourbar_at(t), t_source), color = :DARKSLATEBLUE, linewidth = 3, show_axis=show_axis)
+
+    n = length(positions)
+    curve_partial_lengths = [0;cumsum([norm(P[i] - P[i-1]) for i in 2:length(P)])]
+    curve_length = last(curve_partial_lengths)
+    itp = interpolate((curve_partial_lengths,), 1:n, Gridded(Linear()))
+    N = seconds * fps
+    if filename !== nothing
+        record(scene, filename, 1:N; framerate=fps) do k
+            push!(t_source, round(Int, itp(k/N * curve_length)))
+        end
+    else
+        display(scene)
+        if loop
+            k = 1
+            while true
+                push!(t_source, round(Int, itp(k/N * curve_length)))
+                sleep(1/24)
+                k = k == N ? 1 : k + 1
+            end
+        else
+            for k in 1:N
+                push!(t_source, round(Int, itp(k/N * curve_length)))
+                sleep(1/24)
+            end
+        end
+    end
+end
+
 
 end # module
