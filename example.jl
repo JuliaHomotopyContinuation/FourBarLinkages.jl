@@ -26,4 +26,4 @@ animate(F, coupler_points)
 # create endless loop (interrupt to stop)
 animate(F, coupler_points; loop=true)
 # save animation and hide axis
-animate(F, coupler_points; filename="four-bar.gif", show_axis=false)
+animate(F, coupler_points; filename="four-bar.gif", show_axis=true)
