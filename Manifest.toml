@@ -221,9 +221,9 @@ version = "0.9.1"
 
 [[DynamicPolynomials]]
 deps = ["LinearAlgebra", "MultivariatePolynomials", "Pkg", "Reexport", "Test"]
-git-tree-sha1 = "d5f0b3b68d3359d629742406579862a1407d9548"
+git-tree-sha1 = "71149b015940b6d710a0f5e9e0599ae9ffe97177"
 uuid = "7c1d4256-1411-5781-91ec-d7bc3513ac07"
-version = "0.1.4"
+version = "0.3.0"
 
 [[ElasticArrays]]
 git-tree-sha1 = "d9c079b747b9e9985d83e806bb77e41d149c959a"
@@ -338,7 +338,7 @@ version = "0.7.1"
 
 [[HomotopyContinuation]]
 deps = ["DoubleFloats", "DynamicPolynomials", "ElasticArrays", "FixedPolynomials", "LinearAlgebra", "MixedSubdivisions", "MultivariatePolynomials", "Parameters", "PrettyTables", "Printf", "ProjectiveVectors", "Random", "StaticArrays", "StaticPolynomials", "Test", "TreeViews"]
-git-tree-sha1 = "a9e67eb3228556f81d39556831f25c8cc1c1ff97"
+git-tree-sha1 = "cf6ebaf7a44dee9e380d8fc59a9e73ba3bce3932"
 repo-rev = "master"
 repo-url = "https://github.com/JuliaHomotopyContinuation/HomotopyContinuation.jl.git"
 uuid = "f213a82b-91d6-5c5d-acf7-10f1c761b327"
@@ -498,9 +498,9 @@ version = "0.4.1"
 
 [[MixedSubdivisions]]
 deps = ["LinearAlgebra", "MultivariatePolynomials", "ProgressMeter", "StaticArrays"]
-git-tree-sha1 = "1737a089ee73d59a34de59acf0611e5a755c4220"
+git-tree-sha1 = "ffbb5977a358cbd50288caa60954596ca32a3b34"
 uuid = "291d046c-3347-11e9-1e74-c3d251d406c6"
-version = "0.3.1"
+version = "0.3.2"
 
 [[Mmap]]
 uuid = "a63ad114-7e13-5084-954f-fe012c677804"

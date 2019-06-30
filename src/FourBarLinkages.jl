@@ -159,16 +159,6 @@ function four_bars(points::Vector{<:Complex}, filename::String; real_tol=1e-10)
     fourbars
 end
 
-function loop_equations(F::FourBar)
-    @unpack x, a, y, b = F
-    x̂, â, ŷ, b̂ = conj.((x,a,y,b))
-    vars = @polyvar λ μ θ τ τ̂ # and offsets
-    [(x-a)*λ-x*θ-τ+a,
-     (x̂-â)*θ-x̂*λ-(τ̂-â)*λ*θ,
-     (y-b)*μ-y*θ-τ+b,
-     (ŷ-b̂)*θ-ŷ*μ-(τ̂-b̂)*μ*θ], vars
-end
-
 function is_valid_loop_solution(r)
     is_conjugated_pair(r[3], r[4], 1e-4) || return false
     abs(abs(r[1])-1) < 1e-4 && abs(abs(r[2]) - 1) < 1e-4
@@ -293,6 +283,13 @@ function compute_limits(positions)
     FRect(xmin, ymin, w, h)
 end
 
+function animate(F::FourBar, coupler_points; Δt=1e-3, kwargs...)
+    angles = configurations(F, coupler_points; Δt=Δt)
+    animate(F, angles, coupler_points; kwargs...)
+end
+function animate(F::FourBar, angles::Vector{<:Vector}, coupler_points::Vector{ComplexF64})
+    animate(F, angles..., coupler_points)
+end
 function animate(F::FourBar,
         angles::Vector{NTuple{3,ComplexF64}},
         coupler_points::Vector{ComplexF64};
@@ -307,7 +304,6 @@ function animate(F::FourBar,
     given_points = to_point.(coupler_points)
     #plot Fourbar
     limits = compute_limits(positions);
-    @show limits
     markersize = max(limits.widths...)/50
     scene = Scene(limits=limits, resolution = (1500,1500), scale_plot=false);
     #angle points A and B
@@ -318,16 +314,22 @@ function animate(F::FourBar,
     Makie.scatter!(scene, given_points, marker=:x, markersize=markersize,
         color=:INDIANRED, show_axis=show_axis)
     #Coupler Curve
-    Makie.lines!(scene, P, color = :black, show_axis=show_axis);
+    # Makie.lines!(scene, P, color = :black, show_axis=show_axis);
 
     #Nine points given
     t_source = Node(1)
+
+    loop_closed = false
+    curve_at(t) = loop_closed ? (@view P[1:end]) : view(P, 1:t)
+    Makie.lines!(scene, lift(curve_at, t_source), color = :black, show_axis=show_axis);
 
     fourbar_at = t -> begin
         A, B, C, D, Pᵢ = positions[t]
         [A,C,Pᵢ,D,B,D,C]
     end
     lines!(scene, lift(t->fourbar_at(t), t_source), color = :DARKSLATEBLUE, linewidth = 3, show_axis=show_axis)
+
+
 
     n = length(positions)
     curve_partial_lengths = [0;cumsum([norm(P[i] - P[i-1]) for i in 2:length(P)])]
@@ -345,7 +347,12 @@ function animate(F::FourBar,
             while true
                 push!(t_source, round(Int, itp(k/N * curve_length)))
                 sleep(1/24)
-                k = k == N ? 1 : k + 1
+                if k == N
+                    k = 1
+                    loop_closed = true
+                else
+                    k += 1
+                end
             end
         else
             for k in 1:N
@@ -356,5 +363,99 @@ function animate(F::FourBar,
     end
 end
 
+
+
+function animate(F::FourBar,
+        angles1::Vector{NTuple{3,ComplexF64}},
+        angles2::Vector{NTuple{3,ComplexF64}},
+        coupler_points::Vector{ComplexF64};
+        show_axis=true,
+        fps=24, seconds=5,
+        loop = false,
+        filename::Union{String,Nothing}=nothing)
+
+    positions1 = four_bar_positions(F, angles1)
+    positions2 = four_bar_positions(F, angles2)
+    limits = compute_limits([positions1; positions2])
+    markersize = max(limits.widths...) / 50
+
+    scene = Scene(limits=limits, resolution = (1500,1500), scale_plot=false);
+
+    # Draw mechanism ankers and coupler points
+    Makie.scatter!(scene, [to_point(F.A), to_point(F.B)],
+                color=:DIMGRAY,
+                markersize=markersize, marker='▲', show_axis=show_axis)
+    Makie.scatter!(scene, to_point.(coupler_points), marker=:x, markersize=markersize,
+                color=:INDIANRED, show_axis=show_axis)
+
+    source1, loop_closed_ref1 = add_mechanism!(scene, positions1)
+    source2, loop_closed_ref2 = add_mechanism!(scene, positions2; color=:lightseagreen)
+
+
+    itp1 = interpolate_curve(positions1)
+    itp2 = interpolate_curve(positions2)
+
+    N = seconds * fps
+    if filename !== nothing
+        record(scene, filename, 1:N; framerate=fps) do k
+            push!(source1, round(Int, itp1(k/N)))
+            push!(source2, round(Int, itp2(k/N)))
+        end
+    else
+        display(scene)
+        if loop
+            k = 1
+            while true
+                push!(source1, round(Int, itp1(k/N)))
+                push!(source2, round(Int, itp2(k/N)))
+                sleep(1/24)
+                if k == N
+                    k = 1
+                    loop_closed_ref1[] = true
+                    loop_closed_ref2[] = true
+                else
+                    k += 1
+                end
+            end
+        else
+            for k in 1:N
+                push!(source1, round(Int, itp1(k/N)))
+                push!(source2, round(Int, itp2(k/N)))
+                sleep(1/24)
+            end
+        end
+    end
+end
+
+
+function interpolate_curve(pos)
+    n = length(pos)
+    partials = [0.0]
+    l = 0.0
+    for i in 2:n
+        l += norm(pos[i].P - pos[i-1].P)
+        push!(partials, l)
+    end
+    # normalize partials to length 1
+    partials ./= partials[end]
+    itp = interpolate((partials,), 1:n, Gridded(Linear()))
+    itp
+end
+
+function add_mechanism!(scene, positions; color=:DARKSLATEBLUE)
+    loop_closed = Ref(false)
+    source = Node(1)
+    P = map(pos -> pos.P, positions)
+    curve_at(t) = loop_closed[] ? (@view P[1:end]) : view(P, 1:t)
+    Makie.lines!(scene, lift(curve_at, source),
+                color=color, linewidth=2, show_axis=false);
+    fourbar_at = t -> begin
+        A, B, C, D, Pᵢ = positions[t]
+        [A,C,Pᵢ,D,B,D,C]
+    end
+    lines!(scene, lift(fourbar_at, source), color=color,
+                linewidth = 3, show_axis=false)
+    source, loop_closed
+end
 
 end # module

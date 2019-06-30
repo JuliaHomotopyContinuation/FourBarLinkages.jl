@@ -23,14 +23,11 @@ coupler_points = [complex(0.8961867,-0.09802917),
 fourbars = four_bars(coupler_points, "data/four_bar_start_solutions.jld2")
 
 # pick a fourbar
-F = fourbars[4]
-# Δt is discretization step size for tracing out the curve
-# compute all configuartions (angles) which trace out (a part of) the coupler curve
-curves = configurations(F, coupler_points; Δt=1e-3)
+F = fourbars[3])
 # let's animate this with Makie
-animate(F, curves[1], coupler_points)
+animate(F, coupler_points)
 # create endless loop (interrupt to stop)
-animate(F, curves[1], coupler_points; loop=true)
+animate(F, coupler_points; loop=true)
 # save animation and hide axis
-FBL.animate(F, curves[1], coupler_points; filename="four-bar.gif", show_axis=false)
+animate(F, coupler_points; filename="four-bar.gif", show_axis=false)
 ```
