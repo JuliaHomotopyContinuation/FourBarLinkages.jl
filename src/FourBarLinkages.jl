@@ -175,7 +175,7 @@ function loop_equations(F::FourBar)
      (ŷ-b̂)*θ-ŷ*μ-(τ̂-b̂)*μ*θ], vars
 end
 
-function trace_points(F::FourBar, λ₀, x₀; Δt = 1e-2, max_steps=20_000, accuracy=1e-8)
+function trace_points(F::FourBar, λ₀, x₀; Δt = 1e-2, max_steps=10_000, accuracy=1e-8)
     loop, (λ, _) = loop_equations(F)
     ϕ = ϕ₀ = angle(λ₀)
     angles = [(cis(ϕ₀), x₀[1], x₀[2])]
@@ -202,9 +202,15 @@ function trace_points(F::FourBar, λ₀, x₀; Δt = 1e-2, max_steps=20_000, acc
             Δt = -Δt
             push!(angles, (cis(ϕ), y[1], y[2]))
         end
-
-        if abs(ϕ - ϕ₀) < 0.01Δt && abs(μ₀ - angle(y[1])) < 1e-2 && abs(θ₀ - angle(y[2])) < 1e-2
-            break
+        if ϕ > π
+            ϕ -= 2π
+        elseif ϕ < -π
+            ϕ += 2π
+        end
+        if abs(ϕ - ϕ₀) < 0.5Δt
+            if abs(x₀[1] - y[1]) < 5e-2 && abs(x₀[2] - y[2]) < 5e-2
+                break
+            end
         end
     end
     angles
@@ -278,9 +284,9 @@ function compute_limits(positions)
         ymin = min(ymin, pos.A[2], pos.B[2], pos.C[2], pos.D[2], pos.P[2])
         ymax = max(ymax, pos.A[2], pos.B[2], pos.C[2], pos.D[2], pos.P[2])
     end
-    w = (xmax - xmin) * 1.1
-    h = (ymax - ymin) * 1.1
-    FRect(xmin, ymin, w, h)
+    w = (xmax - xmin)
+    h = (ymax - ymin)
+    FRect(xmin - 0.1w, ymin-0.1h, 1.1w, 1.1h)
 end
 
 function animate(F::FourBar, coupler_points; Δt=1e-3, kwargs...)
@@ -322,12 +328,18 @@ function animate(F::FourBar,
     t_source = Node(1)
 
     if show_axis == false
-        Makie.lines!(scene, P, color = :transparent, show_axis=show_axis);
+        O = Point2f0(limits.origin...)
+        w, h = limits.widths
+        O1 = O + Point2f0(0,w)
+        O2 = O1 + Point2f0(h,0)
+        O3 = O + Point2f0(h,0)
+        Makie.lines!(scene, [O,O1,O2,O3, O], color = :transparent, show_axis=false);
     end
 
     loop_closed = false
     curve_at(t) = loop_closed ? (@view P[1:end]) : view(P, 1:t)
-    Makie.lines!(scene, lift(curve_at, t_source), color = :black, limits=limits, show_axis=show_axis);
+    Makie.lines!(scene, lift(curve_at, t_source), color = :DARKSLATEBLUE,
+            linewidth=2, limits=limits, show_axis=show_axis);
 
     fourbar_at = t -> begin
         A, B, C, D, Pᵢ = positions[t]
