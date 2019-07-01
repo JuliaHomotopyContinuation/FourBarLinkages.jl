@@ -20,9 +20,9 @@ coupler_points = [complex(0.8961867,-0.09802917),
 fourbars = four_bars(coupler_points, "data/four_bar_start_solutions.jld2")
 
 # pick a fourbar
-F = fourbars[3])
+F = fourbars[3]
 # let's animate this with Makie
-animate(F, coupler_points)
+animate(F, coupler_points, show_axis=false)
 # create endless loop (interrupt to stop)
 animate(F, coupler_points; loop=true)
 # save animation and hide axis

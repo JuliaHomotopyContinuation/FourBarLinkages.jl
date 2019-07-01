@@ -310,24 +310,31 @@ function animate(F::FourBar,
 
 
     Makie.scatter!(scene, [to_point(F.A), to_point(F.B)], color=:DIMGRAY,
-                markersize=markersize, marker='▲', show_axis=show_axis)
+                markersize=markersize, marker='▲', show_axis=show_axis,
+                limits=limits)
     Makie.scatter!(scene, given_points, marker=:x, markersize=markersize,
-        color=:INDIANRED, show_axis=show_axis)
+        color=:INDIANRED, show_axis=show_axis,
+        limits=limits)
     #Coupler Curve
     # Makie.lines!(scene, P, color = :black, show_axis=show_axis);
 
     #Nine points given
     t_source = Node(1)
 
+    if show_axis == false
+        Makie.lines!(scene, P, color = :transparent, show_axis=show_axis);
+    end
+
     loop_closed = false
     curve_at(t) = loop_closed ? (@view P[1:end]) : view(P, 1:t)
-    Makie.lines!(scene, lift(curve_at, t_source), color = :black, show_axis=show_axis);
+    Makie.lines!(scene, lift(curve_at, t_source), color = :black, limits=limits, show_axis=show_axis);
 
     fourbar_at = t -> begin
         A, B, C, D, Pᵢ = positions[t]
         [A,C,Pᵢ,D,B,D,C]
     end
-    lines!(scene, lift(t->fourbar_at(t), t_source), color = :DARKSLATEBLUE, linewidth = 3, show_axis=show_axis)
+    lines!(scene, lift(t->fourbar_at(t), t_source), color = :DARKSLATEBLUE, linewidth = 3,
+        limits=limits, show_axis=show_axis)
 
 
 
@@ -384,12 +391,15 @@ function animate(F::FourBar,
     # Draw mechanism ankers and coupler points
     Makie.scatter!(scene, [to_point(F.A), to_point(F.B)],
                 color=:DIMGRAY,
-                markersize=markersize, marker='▲', show_axis=show_axis)
+                markersize=markersize, marker='▲', show_axis=show_axis,
+                limits=limits)
     Makie.scatter!(scene, to_point.(coupler_points), marker=:x, markersize=markersize,
-                color=:INDIANRED, show_axis=show_axis)
+                color=:INDIANRED, show_axis=show_axis,
+                limits=limits)
 
-    source1, loop_closed_ref1 = add_mechanism!(scene, positions1)
-    source2, loop_closed_ref2 = add_mechanism!(scene, positions2; color=:lightseagreen)
+    source1, loop_closed_ref1 = add_mechanism!(scene, positions1; show_axis=show_axis)
+    source2, loop_closed_ref2 = add_mechanism!(scene, positions2;
+                color=:lightseagreen, show_axis=show_axis)
 
 
     itp1 = interpolate_curve(positions1)
@@ -442,19 +452,22 @@ function interpolate_curve(pos)
     itp
 end
 
-function add_mechanism!(scene, positions; color=:DARKSLATEBLUE)
+function add_mechanism!(scene, positions; color=:DARKSLATEBLUE, show_axis=show_axis)
     loop_closed = Ref(false)
     source = Node(1)
     P = map(pos -> pos.P, positions)
     curve_at(t) = loop_closed[] ? (@view P[1:end]) : view(P, 1:t)
+    if show_axis == false
+        Makie.lines!(scene, P, color = :transparent, show_axis=show_axis);
+    end
     Makie.lines!(scene, lift(curve_at, source),
-                color=color, linewidth=2, show_axis=false);
+                color=color, linewidth=2, show_axis=show_axis);
     fourbar_at = t -> begin
         A, B, C, D, Pᵢ = positions[t]
         [A,C,Pᵢ,D,B,D,C]
     end
     lines!(scene, lift(fourbar_at, source), color=color,
-                linewidth = 3, show_axis=false)
+                linewidth = 3, show_axis=show_axis)
     source, loop_closed
 end
 
