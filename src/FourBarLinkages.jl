@@ -24,23 +24,42 @@ struct FourBar
     P₀::ComplexF64
 end
 
-function FourBar(solution::Vector{ComplexF64}, P₀::ComplexF64)
-    x, a, y, b = solution[1], solution[3], solution[5], solution[7]
+function FourBar(x, a, y, b, P₀::ComplexF64)
     u = x - a
     v = y - b
     A = P₀ + a
     B = P₀ + b
     FourBar(A, B, x, a, u, y, b, v, P₀)
 end
+function FourBar(solution::Vector{ComplexF64}, P₀::ComplexF64)
+    x, a, y, b = solution
+    FourBar(x, a, y, b, P₀)
+end
+
+Base.show(io::IO, F::FourBar) = print_fieldnames(io, F)
+
+"""
+     print_fieldnames(io::IO, obj)
+
+ A better default printing for structs.
+ """
+ function print_fieldnames(io::IO, obj)
+     println(io, typeof(obj), ":")
+     for name in fieldnames(typeof(obj))
+         if getfield(obj, name) !== nothing
+             println(io, " • ", name, " → ", getfield(obj, name))
+         end
+     end
+ end
 
 function equations()
-    @polyvar x x̂ a â y ŷ b b̂
+    @polyvar x a y b x̂ â ŷ b̂
     @polyvar γ[1:8] γ̂[1:8] δ[1:8] δ̂[1:8]
     #system of polynomials
     D1 = [(â*x-δ̂[i]*x)*γ[i]+(a*x̂-δ[i]*x̂)*γ̂[i]+(â-x̂)*δ[i]+(a-x)*δ̂[i]-δ[i]*δ̂[i] for i in 1:8]
     D2 = [(b̂*y-δ̂[i]*y)*γ[i]+(b*ŷ-δ[i]*ŷ)*γ̂[i]+(b̂-ŷ)*δ[i]+(b-y)*δ̂[i]-δ[i]*δ̂[i] for i in 1:8]
     D3 = [γ[i]*γ̂[i]+γ[i]+γ̂[i] for i in 1:8]
-    (F=[D1;D2;D3], xayb=[x, x̂, a, â, y, ŷ, b, b̂], γ=γ, γ̂=γ̂, δ=δ, δ̂=δ̂)
+    (F=[D1;D2;D3], xayb=[x, a, y, b, x̂, â, ŷ, b̂], γ=γ, γ̂=γ̂, δ=δ, δ̂=δ̂)
 end
 
 function compute_start_pair()
@@ -59,7 +78,7 @@ function compute_start_pair()
     [xayb₀;Γ;Γ̂], [δ₀; δ̂₀]
 end
 
-function compute_γ_γ̂(x, x̂, a, â, y, ŷ, b, b̂, δ, δ̂)
+function compute_γ_γ̂(x, a, y, b, δ, x̂, â, ŷ, b̂, δ̂)
     γ = @MVector zeros(eltype(x), 8)
     γ̂ = @MVector zeros(eltype(x), 8)
     for j in 1:8
@@ -75,20 +94,21 @@ end
 
 r(x,a,y,b) = ((x-a)*y/(x-y), (b*x - a*y)/(x-y), a-x, a)
 function robert_cognates(v, δ, δ̂)
-    x, x̂, a, â, y, ŷ, b, b̂ = view(v, 1:8)
-    x₁, a₁, y₁, b₁ = r(x, a, y, b)
-    x̂₁, â₁, ŷ₁, b̂₁ = r(x̂, â, ŷ, b̂)
-    γ₁, γ̂₁ = compute_γ_γ̂(x₁, x̂₁, a₁, â₁, y₁, ŷ₁, b₁, b̂₁, δ, δ̂)
-    x₂, a₂, y₂, b₂ = r(x₁, a₁, y₁, b₁)
-    x̂₂, â₂, ŷ₂, b̂₂ = r(x̂₁, â₁, ŷ₁, b̂₁)
-    γ₂, γ̂₂ = compute_γ_γ̂(x₂, x̂₂, a₂, â₂, y₂, ŷ₂, b₂, b̂₂, δ, δ̂)
-    v₁ = [x₁, x̂₁, a₁, â₁, y₁, ŷ₁, b₁, b̂₁, γ₁..., γ̂₁...]
-    v₂ = [x₂, x̂₂, a₂, â₂, y₂, ŷ₂, b₂, b̂₂, γ₂..., γ̂₂...]
+    x, a, y, b, x̂, â, ŷ, b̂ = v
+    xayb₁ = r(x, a, y, b)
+    x̂âŷb̂₁ = r(x̂, â, ŷ, b̂)
+    γ₁, γ̂₁ = compute_γ_γ̂(xayb₁..., δ, x̂âŷb̂₁..., δ̂)
+    xayb₂ = r(xayb₁...)
+    x̂âŷb̂₂ = r(x̂âŷb̂₁...)
+    γ₂, γ̂₂ = compute_γ_γ̂(xayb₂..., δ, x̂âŷb̂₂..., δ̂)
+    v₁ = SVector(xayb₁..., x̂âŷb̂₁..., γ₁..., γ̂₁...)
+    v₂ = SVector(xayb₂..., x̂âŷb̂₂..., γ₂..., γ̂₂...)
     v₁, v₂
 end
-symmetry(s) = [s[5],s[6],s[7],s[8],s[1],s[2],s[3],s[4],
-               s[9],s[10],s[11],s[12],s[13],s[14],s[15],s[16],
-               s[17],s[18],s[19],s[20],s[21],s[22],s[23],s[24]]
+# switch roles of (x,a) and (y,b)
+# We have the variable ordering x a y b x̂ â ŷ b̂
+# So we need to switch to y b x a ŷ b̂ x̂ â
+symmetry(s) = [[s[3],s[4],s[1],s[2],s[7],s[8],s[5],s[6]]; s[9:24]]
 
 compute_generic_solutions(;kwargs...) = compute_generic_solutions(compute_start_pair()...;kwargs...)
 
@@ -118,7 +138,8 @@ function save_generic_solutions(result::MonodromyResult, filename::String)
                 "solutions", reduce(hcat, result.solutions))
 end
 
-function load_generic_solutions(filename)
+
+function load_generic_solutions(filename=joinpath(@__DIR__, "..", "data", "four_bar_start_solutions.jld2"))
     data = FileIO.load(endswith(filename, ".jld2") ? filename : filename * ".jld2")
     (solutions=data["solutions"], δ₀=data["δ₀"], δ̂₀=data["δ̂₀"])
 end
@@ -129,27 +150,29 @@ function solve_instance(δ::Vector{ComplexF64}, filename::String)
     generic_sols, δ₀, δ̂₀ = load_generic_solutions(filename)
     start_sols = [view(generic_sols, 1:24, i) for i in 1:size(generic_sols,2)]
     res = solve(eqs.F, start_sols;
-            accuracy=1e-6,
             precision=PRECISION_ADAPTIVE,
-            max_lost_digits=10,
+            # max_lost_digits=10,
             parameters = [eqs.δ; eqs.δ̂],
             start_parameters=[δ₀;δ̂₀],
             target_parameters=[δ;δ̂])
 end
 
 is_conjugated_pair(u, v, tol) = abs(u - conj(v)) < tol
-is_physical_solution(s, tol) = all(j -> is_conjugated_pair(s[j], s[j+1], tol), 1:2:8)
+is_physical_solution(s, tol) = all(j -> is_conjugated_pair(s[j], s[j+4], tol), 1:4)
 function physical_four_bars(solutions; tol=1e-10)
     filter(s -> is_physical_solution(s, tol), solutions)
 end
 
-function four_bars(points::Vector{<:Complex}, filename::String; real_tol=1e-10)
+function four_bars(points::Vector{<:Complex}, filename::String; kwargs...)
     @assert length(points) == 9 "Expected 9 points"
     eqs = equations()
     P₀ = points[1]
     δ = points[2:9] .- P₀
     result = solve_instance(δ, filename)
-
+    four_bars(result, points; kwargs...)
+end
+function four_bars(result, points; real_tol=1e-10)
+    P₀ = points[1]
     fourbars = FourBar[]
     for s in solutions(result; only_nonsingular=true)
         if is_physical_solution(s, real_tol)
@@ -175,7 +198,7 @@ function loop_equations(F::FourBar)
      (ŷ-b̂)*θ-ŷ*μ-(τ̂-b̂)*μ*θ], vars
 end
 
-function trace_points(F::FourBar, λ₀, x₀; Δt = 1e-2, max_steps=10_000, accuracy=1e-8)
+function trace_points(F::FourBar, λ₀, x₀; Δt = 1e-3, max_steps=20_000, accuracy=1e-8)
     loop, (λ, _) = loop_equations(F)
     ϕ = ϕ₀ = angle(λ₀)
     angles = [(cis(ϕ₀), x₀[1], x₀[2])]
@@ -186,7 +209,7 @@ function trace_points(F::FourBar, λ₀, x₀; Δt = 1e-2, max_steps=10_000, acc
     y = copy(x)
     for i in 2:max_steps
         retcode = track!(tracker, y, cis(ϕ), cis(ϕ+Δt))
-        # todo
+
         if retcode != HC.CoreTrackerStatus.success
             @warn "PathTracker failed with $retcode"
             break
@@ -197,6 +220,7 @@ function trace_points(F::FourBar, λ₀, x₀; Δt = 1e-2, max_steps=10_000, acc
             push!(angles, (cis(ϕ), x[1], x[2]))
             y .= current_x(tracker)
         else
+            # jump to different branch
             branch_solutions = solutions(solve([subs(f, λ => cis(ϕ)) for f in loop]))
             y .= branch_solutions[last(findmax(norm.([s - y for s in branch_solutions])))]
             Δt = -Δt
@@ -207,10 +231,10 @@ function trace_points(F::FourBar, λ₀, x₀; Δt = 1e-2, max_steps=10_000, acc
         elseif ϕ < -π
             ϕ += 2π
         end
-        if abs(ϕ - ϕ₀) < 0.5Δt
-            if abs(x₀[1] - y[1]) < 5e-2 && abs(x₀[2] - y[2]) < 5e-2
+        if abs(ϕ - ϕ₀) < 0.5Δt &&
+           abs(x₀[1] - y[1]) < 1e-3 &&
+           abs(x₀[2] - y[2]) < 1e-3
                 break
-            end
         end
     end
     angles
@@ -240,7 +264,7 @@ function missed_coupler_points(δ_angles_pairs, angles)
     filter(δ_angles_pairs) do (δ, (λ, μ, θ))
         α = SVector(λ, μ, θ)
         for s in angles
-            if norm(α - SVector(s)) < 1e-2
+            if norm(α - SVector(s)) < 1e-1
                 return false
             end
         end
@@ -289,6 +313,26 @@ function compute_limits(positions)
     FRect(xmin - 0.1w, ymin-0.1h, 1.1w, 1.1h)
 end
 
+function fix_scene_limits!(scene, limits)
+    O = Point2f0(limits.origin...)
+    w, h = limits.widths
+    O1 = O + Point2f0(0,w)
+    O2 = O1 + Point2f0(h,0)
+    O3 = O + Point2f0(h,0)
+    Makie.lines!(scene, [O,O1,O2,O3, O], color = :transparent, show_axis=false);
+end
+
+function static!(scene, F::FourBar, coupler_points; markersize=1.0)
+    Makie.scatter!(scene, [to_point(F.A), to_point(F.B)], color=:BLACK,
+                markersize=markersize, marker='▲', show_axis=false)
+    if coupler_points !== nothing
+        Makie.scatter!(scene, to_point.(coupler_points), marker=:x, markersize=markersize,
+            color=:INDIANRED, show_axis=false)
+    end
+    scene
+end
+
+
 function animate(F::FourBar, coupler_points; Δt=1e-3, kwargs...)
     angles = configurations(F, coupler_points; Δt=Δt)
     animate(F, angles, coupler_points; kwargs...)
@@ -298,86 +342,52 @@ function animate(F::FourBar, angles::Vector{<:Vector}, coupler_points::Vector{Co
 end
 function animate(F::FourBar,
         angles::Vector{NTuple{3,ComplexF64}},
-        coupler_points::Vector{ComplexF64};
+        coupler_points::Union{Nothing,Vector{ComplexF64}}=nothing;
         show_axis=true,
         fps=24, seconds=5,
-        loop = false,
+        color=:CADETBLUE,
+        color2=color,
+        loop::Union{Int,Bool} = false,
         filename::Union{String,Nothing}=nothing)
 
     positions = four_bar_positions(F, angles)
     P = map(pos -> pos.P, positions)
     #convert vectors to points
-    given_points = to_point.(coupler_points)
     #plot Fourbar
     limits = compute_limits(positions);
     markersize = max(limits.widths...)/50
     scene = Scene(limits=limits, resolution = (1500,1500), scale_plot=false);
-    #angle points A and B
+    fix_scene_limits!(scene, limits)
+
+    static!(scene, F, coupler_points; markersize=markersize)
 
 
-    Makie.scatter!(scene, [to_point(F.A), to_point(F.B)], color=:DIMGRAY,
-                markersize=markersize, marker='▲', show_axis=show_axis,
-                limits=limits)
-    Makie.scatter!(scene, given_points, marker=:x, markersize=markersize,
-        color=:INDIANRED, show_axis=show_axis,
-        limits=limits)
-    #Coupler Curve
-    # Makie.lines!(scene, P, color = :black, show_axis=show_axis);
-
-    #Nine points given
-    t_source = Node(1)
-
-    if show_axis == false
-        O = Point2f0(limits.origin...)
-        w, h = limits.widths
-        O1 = O + Point2f0(0,w)
-        O2 = O1 + Point2f0(h,0)
-        O3 = O + Point2f0(h,0)
-        Makie.lines!(scene, [O,O1,O2,O3, O], color = :transparent, show_axis=false);
-    end
-
-    loop_closed = false
-    curve_at(t) = loop_closed ? (@view P[1:end]) : view(P, 1:t)
-    Makie.lines!(scene, lift(curve_at, t_source), color = :DARKSLATEBLUE,
-            linewidth=2, limits=limits, show_axis=show_axis);
-
-    fourbar_at = t -> begin
-        A, B, C, D, Pᵢ = positions[t]
-        [A,C,Pᵢ,D,B,D,C]
-    end
-    lines!(scene, lift(t->fourbar_at(t), t_source), color = :DARKSLATEBLUE, linewidth = 3,
-        limits=limits, show_axis=show_axis)
-
-
-
-    n = length(positions)
-    curve_partial_lengths = [0;cumsum([norm(P[i] - P[i-1]) for i in 2:length(P)])]
-    curve_length = last(curve_partial_lengths)
-    itp = interpolate((curve_partial_lengths,), 1:n, Gridded(Linear()))
+    source, loop_closed_ref = add_mechanism!(scene, positions;
+            color=color,
+            show_axis=show_axis, markersize=markersize)
+    itp = interpolate_curve(positions)
     N = seconds * fps
     if filename !== nothing
-        record(scene, filename, 1:N; framerate=fps) do k
-            push!(t_source, round(Int, itp(k/N * curve_length)))
+        record(scene, filename, 0:N; framerate=fps) do k
+            push!(source, round(Int, itp(k/N)))
         end
     else
         display(scene)
-        if loop
-            k = 1
-            while true
-                push!(t_source, round(Int, itp(k/N * curve_length)))
-                sleep(1/24)
-                if k == N
-                    k = 1
-                    loop_closed = true
-                else
-                    k += 1
-                end
-            end
+
+        if loop === false
+            nloops = 1
+        elseif loop === true
+            nloops = typemax(Int64)
         else
-            for k in 1:N
-                push!(t_source, round(Int, itp(k/N * curve_length)))
+            nloops = loop::Int
+        end
+
+        for _ in 1:nloops
+            for k in 0:N
+                push!(source, round(Int, itp(k/N)))
                 sleep(1/24)
             end
+            loop_closed_ref[] = true
         end
     end
 end
@@ -387,10 +397,12 @@ end
 function animate(F::FourBar,
         angles1::Vector{NTuple{3,ComplexF64}},
         angles2::Vector{NTuple{3,ComplexF64}},
-        coupler_points::Vector{ComplexF64};
+        coupler_points::Union{Nothing,Vector{ComplexF64}}=nothing;
         show_axis=true,
+        color=:CADETBLUE,
+        color2=:DODGERBLUE,
         fps=24, seconds=5,
-        loop = false,
+        loop::Union{Int,Bool} = false,
         filename::Union{String,Nothing}=nothing)
 
     positions1 = four_bar_positions(F, angles1)
@@ -401,17 +413,12 @@ function animate(F::FourBar,
     scene = Scene(limits=limits, resolution = (1500,1500), scale_plot=false);
 
     # Draw mechanism ankers and coupler points
-    Makie.scatter!(scene, [to_point(F.A), to_point(F.B)],
-                color=:DIMGRAY,
-                markersize=markersize, marker='▲', show_axis=show_axis,
-                limits=limits)
-    Makie.scatter!(scene, to_point.(coupler_points), marker=:x, markersize=markersize,
-                color=:INDIANRED, show_axis=show_axis,
-                limits=limits)
+    static!(scene, F, coupler_points; markersize=markersize)
 
-    source1, loop_closed_ref1 = add_mechanism!(scene, positions1; show_axis=show_axis)
+    source1, loop_closed_ref1 = add_mechanism!(scene, positions1; show_axis=show_axis,
+                color=color, markersize=markersize)
     source2, loop_closed_ref2 = add_mechanism!(scene, positions2;
-                color=:lightseagreen, show_axis=show_axis)
+                color=color2, show_axis=show_axis, markersize=markersize)
 
 
     itp1 = interpolate_curve(positions1)
@@ -425,26 +432,22 @@ function animate(F::FourBar,
         end
     else
         display(scene)
-        if loop
-            k = 1
-            while true
-                push!(source1, round(Int, itp1(k/N)))
-                push!(source2, round(Int, itp2(k/N)))
-                sleep(1/24)
-                if k == N
-                    k = 1
-                    loop_closed_ref1[] = true
-                    loop_closed_ref2[] = true
-                else
-                    k += 1
-                end
-            end
+        if loop === false
+            nloops = 1
+        elseif loop === true
+            nloops = typemax(Int64)
         else
-            for k in 1:N
+            nloops = loop::Int
+        end
+
+        for _ in 1:nloops
+            for k in 0:N
                 push!(source1, round(Int, itp1(k/N)))
                 push!(source2, round(Int, itp2(k/N)))
-                sleep(1/24)
+                sleep(1/fps)
             end
+            loop_closed_ref1[] = true
+            loop_closed_ref2[] = true
         end
     end
 end
@@ -464,7 +467,7 @@ function interpolate_curve(pos)
     itp
 end
 
-function add_mechanism!(scene, positions; color=:DARKSLATEBLUE, show_axis=show_axis)
+function add_mechanism!(scene, positions; color=:CADETBLUE, markersize=1.0, show_axis=show_axis)
     loop_closed = Ref(false)
     source = Node(1)
     P = map(pos -> pos.P, positions)
@@ -473,13 +476,19 @@ function add_mechanism!(scene, positions; color=:DARKSLATEBLUE, show_axis=show_a
         Makie.lines!(scene, P, color = :transparent, show_axis=show_axis);
     end
     Makie.lines!(scene, lift(curve_at, source),
-                color=color, linewidth=2, show_axis=show_axis);
+                color=color, linewidth=5, show_axis=show_axis);
     fourbar_at = t -> begin
         A, B, C, D, Pᵢ = positions[t]
         [A,C,Pᵢ,D,B,D,C]
     end
-    lines!(scene, lift(fourbar_at, source), color=color,
+    lines!(scene, lift(fourbar_at, source), color=:black,
                 linewidth = 3, show_axis=show_axis)
+    scatter!(scene, lift(i -> [P[i]], source), color=color,
+        markersize=0.5markersize,
+        show_axis=show_axis)
+    scatter!(scene, lift(i -> [positions[i].D, positions[i].C], source), color=:black,
+        markersize=0.25markersize,
+        show_axis=show_axis)
     source, loop_closed
 end
 
