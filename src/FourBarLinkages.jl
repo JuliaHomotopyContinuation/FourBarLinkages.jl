@@ -1,7 +1,7 @@
 module FourBarLinkages
 
 export compute_generic_solutions, save_generic_solutions, load_generic_solutions,
-    four_bars, FourBar, animate, configurations
+    solve_instance, four_bars, FourBar, animate, configurations
 
 using HomotopyContinuation, LinearAlgebra, DynamicPolynomials
 using Interpolations
@@ -93,7 +93,7 @@ function compute_γ_γ̂(x, a, y, b, δ, x̂, â, ŷ, b̂, δ̂)
 end
 
 r(x,a,y,b) = ((x-a)*y/(x-y), (b*x - a*y)/(x-y), a-x, a)
-function robert_cognates(v, δ, δ̂)
+function roberts_cognates(v, δ, δ̂)
     x, a, y, b, x̂, â, ŷ, b̂ = v
     xayb₁ = r(x, a, y, b)
     x̂âŷb̂₁ = r(x̂, â, ŷ, b̂)
@@ -116,7 +116,7 @@ jld2_file(filename) = endswith(filename, ".jld2") ? filename : filename * ".jld2
 function compute_generic_solutions(x₀, p₀; filename=nothing)
     eqs = equations()
     δ₀, δ̂₀ = p₀[1:8], p₀[9:16]
-    group_actions = GroupActions(symmetry, s -> robert_cognates(s, δ₀, δ̂₀))
+    group_actions = GroupActions(symmetry, s -> roberts_cognates(s, δ₀, δ̂₀))
     @info "Computing all 1442 generic solutions..."
     result = monodromy_solve(eqs.F, x₀, p₀;
                 parameters=[eqs.δ;eqs.δ̂],
@@ -138,23 +138,22 @@ function save_generic_solutions(result::MonodromyResult, filename::String)
                 "solutions", reduce(hcat, result.solutions))
 end
 
+const GENERIC_SOLUTIONS_PATH = joinpath(@__DIR__, "..", "data", "four_bar_start_solutions.jld2")
 
-function load_generic_solutions(filename=joinpath(@__DIR__, "..", "data", "four_bar_start_solutions.jld2"))
+function load_generic_solutions(filename=GENERIC_SOLUTIONS_PATH)
     data = FileIO.load(endswith(filename, ".jld2") ? filename : filename * ".jld2")
     (solutions=data["solutions"], δ₀=data["δ₀"], δ̂₀=data["δ̂₀"])
 end
 
-function solve_instance(δ::Vector{ComplexF64}, filename::String)
+function solve_instance(δ::Vector{ComplexF64}, filename::String=GENERIC_SOLUTIONS_PATH; kwargs...)
     eqs = equations()
     δ̂ = conj.(δ)
     generic_sols, δ₀, δ̂₀ = load_generic_solutions(filename)
     start_sols = [view(generic_sols, 1:24, i) for i in 1:size(generic_sols,2)]
     res = solve(eqs.F, start_sols;
-            precision=PRECISION_ADAPTIVE,
-            # max_lost_digits=10,
             parameters = [eqs.δ; eqs.δ̂],
             start_parameters=[δ₀;δ̂₀],
-            target_parameters=[δ;δ̂])
+            target_parameters=[δ;δ̂], kwargs...)
 end
 
 is_conjugated_pair(u, v, tol) = abs(u - conj(v)) < tol
@@ -163,9 +162,8 @@ function physical_four_bars(solutions; tol=1e-10)
     filter(s -> is_physical_solution(s, tol), solutions)
 end
 
-function four_bars(points::Vector{<:Complex}, filename::String; kwargs...)
+function four_bars(points::Vector{<:Complex}, filename::String=GENERIC_SOLUTIONS_PATH; kwargs...)
     @assert length(points) == 9 "Expected 9 points"
-    eqs = equations()
     P₀ = points[1]
     δ = points[2:9] .- P₀
     result = solve_instance(δ, filename)
@@ -204,7 +202,7 @@ function trace_points(F::FourBar, λ₀, x₀; Δt = 1e-3, max_steps=20_000, acc
     angles = [(cis(ϕ₀), x₀[1], x₀[2])]
     μ₀, θ₀ = angle(x₀[1]), angle(x₀[2])
     tracker = coretracker(SPHomotopy(loop, λ), [randn(ComplexF64, 4)]; accuracy=accuracy)
-    HC.setup!(tracker, x₀, cis(ϕ), cis(ϕ+Δt))
+    HC.init!(tracker, x₀, cis(ϕ), cis(ϕ+Δt))
     x = current_x(tracker)
     y = copy(x)
     for i in 2:max_steps

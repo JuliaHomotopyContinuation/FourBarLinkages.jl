@@ -1,8 +1,6 @@
 # FourBarLinkages
 
 ```julia
-using Pkg; Pkg.activate(@__DIR__); Pkg.instantiate();
-
 using FourBarLinkages
 
 # coupler points in isotropic coordinates
@@ -20,10 +18,10 @@ coupler_points = [complex(0.8961867,-0.09802917),
 #       compute_generic_solutions(; filename=data/four_bar_start_solutions.jld2)
 
 # compute four bar linkages for the couple points from the stored results
-fourbars = four_bars(coupler_points, "data/four_bar_start_solutions.jld2")
+fourbars = four_bars(coupler_point)
 
 # pick a fourbar
-F = fourbars[3])
+F = fourbars[3]
 # let's animate this with Makie
 animate(F, coupler_points)
 # create endless loop (interrupt to stop)
