@@ -333,10 +333,10 @@ end
 
 function animate(F::FourBar, coupler_points; Δt=1e-3, kwargs...)
     angles = configurations(F, coupler_points; Δt=Δt)
-    animate(F, angles, coupler_points; kwargs...)
+    Makie.animate(F, angles, coupler_points; kwargs...)
 end
 function animate(F::FourBar, angles::Vector{<:Vector}, coupler_points::Vector{ComplexF64}; kwargs...)
-    animate(F, angles..., coupler_points; kwargs...)
+    Makie.animate(F, angles..., coupler_points; kwargs...)
 end
 function animate(F::FourBar,
         angles::Vector{NTuple{3,ComplexF64}},
